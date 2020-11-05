@@ -19,8 +19,9 @@ async def system_health_info(hass: HomeAssistant):
     data = {}
     for entry in hass.data[DOMAIN]:
         for gateway in hass.data[DOMAIN][entry]["gateways"]:
-            data[
-                f"{gateway.gateway.id}_local_connection"
-            ] = gateway.gateway.local_connection
+            gateway_name = gateway.gateway.name.replace(" ", "_").lower()
+            data[gateway_name] = (
+                "Local" if gateway.gateway.local_connection else "Cloud"
+            )
 
     return data
