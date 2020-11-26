@@ -16,5 +16,9 @@
         }
       }
     }
-  }
+  },
+  "system_health": {
+    "info": {
+      "local_connection": "Connected to gateway locally"
+    }
 }
