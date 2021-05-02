@@ -1,4 +1,8 @@
 """Config flow to configure the devolo home control integration."""
+from __future__ import annotations
+
+from typing import Any
+
 import voluptuous as vol
 
 from homeassistant import config_entries
@@ -23,7 +27,7 @@ class DevoloHomeControlFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             vol.Required(CONF_PASSWORD): str,
         }
 
-    async def async_step_user(self, user_input=None):
+    async def async_step_user(self, user_input: dict[str, Any] | None = None):
         """Handle a flow initiated by the user."""
         if self.show_advanced_options:
             self.data_schema[
@@ -44,7 +48,9 @@ class DevoloHomeControlFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             return await self.async_step_zeroconf_confirm()
         return self.async_abort(reason="Not a devolo Home Control gateway.")
 
-    async def async_step_zeroconf_confirm(self, user_input=None):
+    async def async_step_zeroconf_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ):
         """Handle a flow initiated by zeroconf."""
         if user_input is None:
             return self._show_form(step_id="zeroconf_confirm")
@@ -55,7 +61,7 @@ class DevoloHomeControlFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 step_id="zeroconf_confirm", errors={"base": "invalid_auth"}
             )
 
-    async def _connect_mydevolo(self, user_input):
+    async def _connect_mydevolo(self, user_input: dict[str, Any]):
         """Connect to mydevolo."""
         mydevolo = configure_mydevolo(conf=user_input)
         credentials_valid = await self.hass.async_add_executor_job(
@@ -77,7 +83,7 @@ class DevoloHomeControlFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     @callback
-    def _show_form(self, step_id, errors=None):
+    def _show_form(self, step_id: str, errors: dict[str, str] | None = None):
         """Show the form to the user."""
         return self.async_show_form(
             step_id=step_id,

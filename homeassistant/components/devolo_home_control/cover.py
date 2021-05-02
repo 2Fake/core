@@ -1,4 +1,6 @@
 """Platform for cover integration."""
+from __future__ import annotations
+
 from homeassistant.components.cover import (
     DEVICE_CLASS_BLIND,
     SUPPORT_CLOSE,
@@ -8,16 +10,17 @@ from homeassistant.components.cover import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
 from .devolo_multi_level_switch import DevoloMultiLevelSwitchDeviceEntity
 
 
 async def async_setup_entry(
-    hass: HomeAssistant, entry: ConfigEntry, async_add_entities
+    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     """Get all cover devices and setup them via config entry."""
-    entities = []
+    entities: list[DevoloCoverDeviceEntity] = []
 
     for gateway in hass.data[DOMAIN][entry.entry_id]["gateways"]:
         for device in gateway.multi_level_switch_devices:
@@ -38,22 +41,22 @@ class DevoloCoverDeviceEntity(DevoloMultiLevelSwitchDeviceEntity, CoverEntity):
     """Representation of a cover device within devolo Home Control."""
 
     @property
-    def current_cover_position(self):
+    def current_cover_position(self) -> int:
         """Return the current position. 0 is closed. 100 is open."""
         return self._value
 
     @property
-    def device_class(self):
+    def device_class(self) -> str:
         """Return the class of the device."""
         return DEVICE_CLASS_BLIND
 
     @property
-    def is_closed(self):
+    def is_closed(self) -> bool:
         """Return if the blind is closed or not."""
         return not bool(self._value)
 
     @property
-    def supported_features(self):
+    def supported_features(self) -> int:
         """Flag supported features."""
         return SUPPORT_OPEN | SUPPORT_CLOSE | SUPPORT_SET_POSITION
 
