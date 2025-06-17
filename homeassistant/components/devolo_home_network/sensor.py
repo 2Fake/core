@@ -87,7 +87,7 @@ SENSOR_TYPES: dict[str, DevoloSensorEntityDescription[Any, Any]] = {
     ](
         key=CONNECTED_WIFI_CLIENTS,
         state_class=SensorStateClass.MEASUREMENT,
-        value_func=len,
+        value_func=lambda data: len(data.keys()),
     ),
     NEIGHBORING_WIFI_NETWORKS: DevoloSensorEntityDescription[list[NeighborAPInfo], int](
         key=NEIGHBORING_WIFI_NETWORKS,
