@@ -18,6 +18,7 @@ FIRMWARE_UPDATE_INTERVAL = timedelta(hours=5)
 LONG_UPDATE_INTERVAL = timedelta(minutes=5)
 SHORT_UPDATE_INTERVAL = timedelta(seconds=15)
 
+APTYPE = "ap_type"
 CONNECTED_PLC_DEVICES = "connected_plc_devices"
 CONNECTED_TO_ROUTER = "connected_to_router"
 CONNECTED_WIFI_CLIENTS = "connected_wifi_clients"
@@ -33,12 +34,13 @@ RESTART = "restart"
 START_WPS = "start_wps"
 SWITCH_GUEST_WIFI = "switch_guest_wifi"
 SWITCH_LEDS = "switch_leds"
+WIFI_BAND = "wifi_band"
 
 WIFI_APTYPE = {
-    WIFI_VAP_MAIN_AP: "Main",
-    WIFI_VAP_GUEST_AP: "Guest",
+    WIFI_VAP_MAIN_AP: "main",
+    WIFI_VAP_GUEST_AP: "guest",
 }
 WIFI_BANDS = {
-    WIFI_BAND_2G: 2.4,
-    WIFI_BAND_5G: 5,
+    WIFI_BAND_2G: "2",
+    WIFI_BAND_5G: "5",
 }

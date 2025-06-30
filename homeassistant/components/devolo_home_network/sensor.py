@@ -8,7 +8,14 @@ from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Any
 
-from devolo_plc_api.device_api import ConnectedStationInfo, NeighborAPInfo
+from devolo_plc_api.device_api import (
+    WIFI_BAND_2G,
+    WIFI_BAND_5G,
+    WIFI_VAP_GUEST_AP,
+    WIFI_VAP_MAIN_AP,
+    ConnectedStationInfo,
+    NeighborAPInfo,
+)
 from devolo_plc_api.plcnet_api import REMOTE, DataRate, LogicalNetwork
 
 from homeassistant.components.sensor import (
@@ -17,21 +24,25 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.const import EntityCategory, UnitOfDataRate
-from homeassistant.core import HomeAssistant
+from homeassistant.const import STATE_UNKNOWN, EntityCategory, UnitOfDataRate
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.util.dt import utcnow
 
 from .const import (
+    APTYPE,
     CONNECTED_PLC_DEVICES,
     CONNECTED_WIFI_CLIENTS,
     LAST_RESTART,
     NEIGHBORING_WIFI_NETWORKS,
     PLC_RX_RATE,
     PLC_TX_RATE,
+    WIFI_APTYPE,
+    WIFI_BAND,
+    WIFI_BANDS,
 )
 from .coordinator import DevoloDataUpdateCoordinator, DevoloHomeNetworkConfigEntry
-from .entity import DevoloCoordinatorEntity
+from .entity import DevoloCoordinatorEntity, DevoloCoordinatorStationEntity
 
 PARALLEL_UPDATES = 0
 
@@ -47,13 +58,14 @@ def _last_restart(runtime: int) -> datetime:
 
 
 type _CoordinatorDataType = (
-    LogicalNetwork
+    ConnectedStationInfo
+    | LogicalNetwork
     | DataRate
     | dict[str, ConnectedStationInfo]
     | list[NeighborAPInfo]
     | int
 )
-type _SensorDataType = int | float | datetime
+type _SensorDataType = int | float | datetime | str
 
 
 class DataRateDirection(StrEnum):
@@ -74,6 +86,30 @@ class DevoloSensorEntityDescription[
 
 
 SENSOR_TYPES: dict[str, DevoloSensorEntityDescription[Any, Any]] = {
+    APTYPE: DevoloSensorEntityDescription[ConnectedStationInfo, str](
+        key=APTYPE,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+        device_class=SensorDeviceClass.ENUM,
+        options=[
+            WIFI_APTYPE[WIFI_VAP_MAIN_AP],
+            WIFI_APTYPE[WIFI_VAP_GUEST_AP],
+            STATE_UNKNOWN,
+        ],
+        value_func=lambda data: WIFI_APTYPE[data.vap_type],
+    ),
+    WIFI_BAND: DevoloSensorEntityDescription[ConnectedStationInfo, str](
+        key=WIFI_BAND,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+        device_class=SensorDeviceClass.ENUM,
+        options=[
+            WIFI_BANDS[WIFI_BAND_2G],
+            WIFI_BANDS[WIFI_BAND_5G],
+            STATE_UNKNOWN,
+        ],
+        value_func=lambda data: WIFI_BANDS[data.band],
+    ),
     CONNECTED_PLC_DEVICES: DevoloSensorEntityDescription[LogicalNetwork, int](
         key=CONNECTED_PLC_DEVICES,
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -131,6 +167,34 @@ async def async_setup_entry(
     """Get all devices and sensors and setup them via config entry."""
     device = entry.runtime_data.device
     coordinators = entry.runtime_data.coordinators
+    tracked = set()
+
+    @callback
+    def new_wifi_station() -> None:
+        """Add new devices if needed."""
+        new_entities = []
+        for mac_address in coordinators[CONNECTED_WIFI_CLIENTS].data:
+            if mac_address in tracked:
+                continue
+
+            tracked.add(mac_address)
+            new_entities.append(
+                DevoloSensorStationEntity(
+                    entry,
+                    coordinators[CONNECTED_WIFI_CLIENTS],
+                    SENSOR_TYPES[APTYPE],
+                    mac_address,
+                )
+            )
+            new_entities.append(
+                DevoloSensorStationEntity(
+                    entry,
+                    coordinators[CONNECTED_WIFI_CLIENTS],
+                    SENSOR_TYPES[WIFI_BAND],
+                    mac_address,
+                )
+            )
+        async_add_entities(new_entities)
 
     entities: list[BaseDevoloSensorEntity[Any, Any, Any]] = []
     if device.plcnet:
@@ -185,6 +249,9 @@ async def async_setup_entry(
                 SENSOR_TYPES[NEIGHBORING_WIFI_NETWORKS],
             )
         )
+        entry.async_on_unload(
+            coordinators[CONNECTED_WIFI_CLIENTS].async_add_listener(new_wifi_station)
+        )
     async_add_entities(entities)
 
 
@@ -219,7 +286,7 @@ class DevoloSensorEntity[
     entity_description: DevoloSensorEntityDescription[_CoordinatorDataT, _SensorDataT]
 
     @property
-    def native_value(self) -> int | float | datetime:
+    def native_value(self) -> int | float | datetime | str:
         """State of the sensor."""
         return self.entity_description.value_func(self.coordinator.data)
 
@@ -261,4 +328,30 @@ class DevoloPlcDataRateSensorEntity(
                 if data_rate.mac_address_from == self.device.mac
                 and data_rate.mac_address_to == self._peer
             )
+        )
+
+
+class DevoloSensorStationEntity(DevoloCoordinatorStationEntity, SensorEntity):
+    """Representation of a generic devolo sensor created for a connected wi-fi station."""
+
+    entity_description: DevoloSensorEntityDescription[ConnectedStationInfo, str]
+
+    def __init__(
+        self,
+        entry: DevoloHomeNetworkConfigEntry,
+        coordinator: DevoloDataUpdateCoordinator[dict[str, ConnectedStationInfo]],
+        description: DevoloSensorEntityDescription[ConnectedStationInfo, str],
+        mac_address: str,
+    ) -> None:
+        """Initialize entity."""
+        self.entity_description = description
+        super().__init__(entry, coordinator, mac_address)
+
+    @property
+    def native_value(self) -> str:
+        """State of the sensor."""
+        if self.mac_address not in self.coordinator.data:
+            return STATE_UNKNOWN
+        return self.entity_description.value_func(
+            self.coordinator.data[self.mac_address]
         )

@@ -69,6 +69,14 @@
       }
     },
     "sensor": {
+      "ap_type": {
+        "name": "Network Type",
+        "state": {
+          "unknown": "Unknown",
+          "main": "Main Wi-Fi",
+          "guest": "Guest Wi-Fi"
+        }
+      },
       "connected_plc_devices": {
         "name": "Connected PLC devices"
       },
@@ -86,6 +94,14 @@
       },
       "plc_tx_rate": {
         "name": "PLC uplink PHY rate"
+      },
+      "wifi_band": {
+        "name": "Wi-Fi band",
+        "state": {
+          "unknown": "Unknown",
+          "2": "2.4 GHz",
+          "5": "5 GHz"
+        }
       }
     },
     "switch": {

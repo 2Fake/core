@@ -19,7 +19,8 @@ from .const import DOMAIN
 from .coordinator import DevoloDataUpdateCoordinator, DevoloHomeNetworkConfigEntry
 
 type _DataType = (
-    LogicalNetwork
+    ConnectedStationInfo
+    | LogicalNetwork
     | DataRate
     | dict[str, ConnectedStationInfo]
     | list[NeighborAPInfo]
@@ -61,6 +62,32 @@ class DevoloEntity(Entity):
         )
 
 
+class DevoloStationEntity(Entity):
+    """Representation of a wi-fi station connected to a devolo home network device."""
+
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        entry: DevoloHomeNetworkConfigEntry,
+        mac_address: str,
+    ) -> None:
+        """Initialize a devolo home network device."""
+        self.device = entry.runtime_data.device
+        self.entry = entry
+        self.mac_address = mac_address
+
+        self._attr_device_info = DeviceInfo(
+            connections={(CONNECTION_NETWORK_MAC, mac_address)},
+            via_device=(DOMAIN, self.device.serial_number),
+            name=mac_address,
+        )
+        self._attr_translation_key = self.entity_description.key
+        self._attr_unique_id = (
+            f"{self.device.serial_number}_{mac_address}_{self.entity_description.key}"
+        )
+
+
 class DevoloCoordinatorEntity[_DataT: _DataType](
     CoordinatorEntity[DevoloDataUpdateCoordinator[_DataT]], DevoloEntity
 ):
@@ -74,3 +101,20 @@ class DevoloCoordinatorEntity[_DataT: _DataType](
         """Initialize a devolo home network device."""
         super().__init__(coordinator)
         DevoloEntity.__init__(self, entry)
+
+
+class DevoloCoordinatorStationEntity(
+    CoordinatorEntity[DevoloDataUpdateCoordinator[dict[str, ConnectedStationInfo]]],
+    DevoloStationEntity,
+):
+    """Representation of a coordinated devolo home network device."""
+
+    def __init__(
+        self,
+        entry: DevoloHomeNetworkConfigEntry,
+        coordinator: DevoloDataUpdateCoordinator[dict[str, ConnectedStationInfo]],
+        mac_address: str,
+    ) -> None:
+        """Initialize a devolo home network device."""
+        super().__init__(coordinator)
+        DevoloStationEntity.__init__(self, entry, mac_address)
