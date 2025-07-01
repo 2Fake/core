@@ -6,6 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
+import re
 from typing import Any
 
 from devolo_plc_api.device_api import (
@@ -19,6 +20,7 @@ from devolo_plc_api.device_api import (
 from devolo_plc_api.plcnet_api import REMOTE, DataRate, LogicalNetwork
 
 from homeassistant.components.sensor import (
+    DOMAIN as SENSOR_DOMAIN,
     SensorDeviceClass,
     SensorEntity,
     SensorEntityDescription,
@@ -26,6 +28,7 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.const import STATE_UNKNOWN, EntityCategory, UnitOfDataRate
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.util.dt import utcnow
 
@@ -33,6 +36,7 @@ from .const import (
     APTYPE,
     CONNECTED_PLC_DEVICES,
     CONNECTED_WIFI_CLIENTS,
+    DOMAIN,
     LAST_RESTART,
     NEIGHBORING_WIFI_NETWORKS,
     PLC_RX_RATE,
@@ -167,6 +171,7 @@ async def async_setup_entry(
     """Get all devices and sensors and setup them via config entry."""
     device = entry.runtime_data.device
     coordinators = entry.runtime_data.coordinators
+    registry = er.async_get(hass)
     tracked = set()
 
     @callback
@@ -195,6 +200,40 @@ async def async_setup_entry(
                 )
             )
         async_add_entities(new_entities)
+
+    @callback
+    def restore_wifi_stations() -> None:
+        """Restore clients that are not a part of active clients list."""
+        missing = []
+        pattern = re.compile(
+            rf"{device.serial_number}_((?:[0-9A-F]{{2}}[:]){{5}}[0-9A-Fa-f]{{2}})_\w*"
+        )
+        for entity in er.async_entries_for_config_entry(registry, entry.entry_id):
+            mac_address = pattern.search(entity.unique_id)
+            if (
+                mac_address
+                and entity.platform == DOMAIN
+                and entity.domain == SENSOR_DOMAIN
+                and mac_address[1] not in tracked
+            ):
+                missing.append(
+                    DevoloSensorStationEntity(
+                        entry,
+                        coordinators[CONNECTED_WIFI_CLIENTS],
+                        SENSOR_TYPES[APTYPE],
+                        mac_address[1],
+                    )
+                )
+                missing.append(
+                    DevoloSensorStationEntity(
+                        entry,
+                        coordinators[CONNECTED_WIFI_CLIENTS],
+                        SENSOR_TYPES[WIFI_BAND],
+                        mac_address[1],
+                    )
+                )
+                tracked.add(mac_address[1])
+        async_add_entities(missing)
 
     entities: list[BaseDevoloSensorEntity[Any, Any, Any]] = []
     if device.plcnet:
@@ -249,6 +288,7 @@ async def async_setup_entry(
                 SENSOR_TYPES[NEIGHBORING_WIFI_NETWORKS],
             )
         )
+        restore_wifi_stations()
         entry.async_on_unload(
             coordinators[CONNECTED_WIFI_CLIENTS].async_add_listener(new_wifi_station)
         )
