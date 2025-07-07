@@ -12,15 +12,19 @@ from homeassistant.components.devolo_home_network.const import (
     DOMAIN,
     LONG_UPDATE_INTERVAL,
     SHORT_UPDATE_INTERVAL,
+    WIFI_APTYPE,
+    WIFI_BAND_5G,
+    WIFI_BANDS,
+    WIFI_VAP_MAIN_AP,
 )
 from homeassistant.components.sensor import DOMAIN as PLATFORM
 from homeassistant.config_entries import SOURCE_REAUTH, ConfigEntryState
-from homeassistant.const import STATE_UNAVAILABLE
+from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 
 from . import configure_integration
-from .const import PLCNET
+from .const import CONNECTED_STATIONS, DISCOVERY_INFO, NO_CONNECTED_STATIONS, PLCNET
 from .mock import MockDevice
 
 from tests.common import async_fire_time_changed
@@ -210,3 +214,130 @@ async def test_update_last_update_auth_failed(
     assert "context" in flow
     assert flow["context"]["source"] == SOURCE_REAUTH
     assert flow["context"]["entry_id"] == entry.entry_id
+
+
+@pytest.mark.usefixtures("entity_registry_enabled_by_default")
+@pytest.mark.freeze_time("2025-07-07 12:00:00+00:00")
+async def test_wifi_device_sensor(
+    hass: HomeAssistant,
+    mock_device: MockDevice,
+    entity_registry: er.EntityRegistry,
+    freezer: FrozenDateTimeFactory,
+    snapshot: SnapshotAssertion,
+) -> None:
+    """Test appearing wifi client."""
+    mock_device.device.async_get_wifi_connected_station = AsyncMock(
+        return_value=NO_CONNECTED_STATIONS
+    )
+    mac_address = CONNECTED_STATIONS[0].mac_address.replace(":", "_").lower()
+    entry = configure_integration(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    state_key_aptype = f"{PLATFORM}.{mac_address}_network_type"
+    state_key_wifi_band = f"{PLATFORM}.{mac_address}_wi_fi_band"
+
+    assert not hass.states.get(state_key_aptype)
+    assert not entity_registry.async_get(state_key_aptype)
+    assert not hass.states.get(state_key_wifi_band)
+    assert not entity_registry.async_get(state_key_wifi_band)
+
+    # Device appears
+    mock_device.device.async_get_wifi_connected_station = AsyncMock(
+        return_value=CONNECTED_STATIONS
+    )
+    freezer.tick(LONG_UPDATE_INTERVAL)
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+
+    assert hass.states.get(state_key_aptype) == snapshot
+    assert entity_registry.async_get(state_key_aptype) == snapshot
+    assert hass.states.get(state_key_wifi_band) == snapshot
+    assert entity_registry.async_get(state_key_wifi_band) == snapshot
+
+    # Device not home
+    mock_device.device.async_get_wifi_connected_station = AsyncMock(
+        return_value=NO_CONNECTED_STATIONS
+    )
+    freezer.tick(LONG_UPDATE_INTERVAL)
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+
+    state_aptype = hass.states.get(state_key_aptype)
+    state_wifi_band = hass.states.get(state_key_wifi_band)
+    assert state_aptype is not None
+    assert state_aptype.state == STATE_UNKNOWN
+    assert state_wifi_band is not None
+    assert state_wifi_band.state == STATE_UNKNOWN
+
+    # Emulate device failure
+    mock_device.device.async_get_wifi_connected_station = AsyncMock(
+        side_effect=DeviceUnavailable
+    )
+    freezer.tick(LONG_UPDATE_INTERVAL)
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+
+    state_aptype = hass.states.get(state_key_aptype)
+    state_wifi_band = hass.states.get(state_key_wifi_band)
+    assert state_aptype is not None
+    assert state_aptype.state == STATE_UNAVAILABLE
+    assert state_wifi_band is not None
+    assert state_wifi_band.state == STATE_UNAVAILABLE
+
+    # Emulate device recovers
+    mock_device.device.async_get_wifi_connected_station = AsyncMock(
+        return_value=CONNECTED_STATIONS
+    )
+    freezer.tick(LONG_UPDATE_INTERVAL)
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+
+    state_aptype = hass.states.get(state_key_aptype)
+    state_wifi_band = hass.states.get(state_key_wifi_band)
+    assert state_aptype is not None
+    assert state_aptype.state == WIFI_APTYPE[WIFI_VAP_MAIN_AP]
+    assert state_wifi_band is not None
+    assert state_wifi_band.state == WIFI_BANDS[WIFI_BAND_5G]
+
+
+@pytest.mark.usefixtures("entity_registry_enabled_by_default")
+async def test_restoring_clients(
+    hass: HomeAssistant,
+    mock_device: MockDevice,
+    entity_registry: er.EntityRegistry,
+) -> None:
+    """Test restoring existing device_tracker entities."""
+    mac_address = CONNECTED_STATIONS[0].mac_address
+    state_key_aptype = (
+        f"{PLATFORM}.{mac_address.replace(':', '_').lower()}_network_type"
+    )
+    state_key_wifi_band = (
+        f"{PLATFORM}.{mac_address.replace(':', '_').lower()}_wi_fi_band"
+    )
+    entry = configure_integration(hass)
+    entity_registry.async_get_or_create(
+        PLATFORM,
+        DOMAIN,
+        f"{DISCOVERY_INFO.properties['SN']}_{mac_address}_network_type",
+        config_entry=entry,
+    )
+    entity_registry.async_get_or_create(
+        PLATFORM,
+        DOMAIN,
+        f"{DISCOVERY_INFO.properties['SN']}_{mac_address}_wi_fi_band",
+        config_entry=entry,
+    )
+
+    mock_device.device.async_get_wifi_connected_station = AsyncMock(
+        return_value=NO_CONNECTED_STATIONS
+    )
+
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    state_aptype = hass.states.get(state_key_aptype)
+    state_wifi_band = hass.states.get(state_key_wifi_band)
+    assert state_aptype is not None
+    assert state_aptype.state == STATE_UNKNOWN
+    assert state_wifi_band is not None
+    assert state_wifi_band.state == STATE_UNKNOWN
