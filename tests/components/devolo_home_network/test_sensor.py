@@ -226,15 +226,15 @@ async def test_wifi_device_sensor(
     snapshot: SnapshotAssertion,
 ) -> None:
     """Test appearing wifi client."""
+    mac_address = CONNECTED_STATIONS[0].mac_address.replace(":", "_").lower()
+    state_key_aptype = f"{PLATFORM}.{mac_address}_network_type"
+    state_key_wifi_band = f"{PLATFORM}.{mac_address}_wi_fi_band"
+
     mock_device.device.async_get_wifi_connected_station = AsyncMock(
         return_value=NO_CONNECTED_STATIONS
     )
-    mac_address = CONNECTED_STATIONS[0].mac_address.replace(":", "_").lower()
     entry = configure_integration(hass)
     await hass.config_entries.async_setup(entry.entry_id)
-    await hass.async_block_till_done()
-    state_key_aptype = f"{PLATFORM}.{mac_address}_network_type"
-    state_key_wifi_band = f"{PLATFORM}.{mac_address}_wi_fi_band"
 
     assert not hass.states.get(state_key_aptype)
     assert not entity_registry.async_get(state_key_aptype)
@@ -247,7 +247,6 @@ async def test_wifi_device_sensor(
     )
     freezer.tick(LONG_UPDATE_INTERVAL)
     async_fire_time_changed(hass)
-    await hass.async_block_till_done()
 
     assert hass.states.get(state_key_aptype) == snapshot
     assert entity_registry.async_get(state_key_aptype) == snapshot
@@ -260,13 +259,10 @@ async def test_wifi_device_sensor(
     )
     freezer.tick(LONG_UPDATE_INTERVAL)
     async_fire_time_changed(hass)
-    await hass.async_block_till_done()
 
-    state_aptype = hass.states.get(state_key_aptype)
-    state_wifi_band = hass.states.get(state_key_wifi_band)
-    assert state_aptype is not None
+    assert (state_aptype := hass.states.get(state_key_aptype))
     assert state_aptype.state == STATE_UNKNOWN
-    assert state_wifi_band is not None
+    assert (state_wifi_band := hass.states.get(state_key_wifi_band))
     assert state_wifi_band.state == STATE_UNKNOWN
 
     # Emulate device failure
@@ -275,13 +271,10 @@ async def test_wifi_device_sensor(
     )
     freezer.tick(LONG_UPDATE_INTERVAL)
     async_fire_time_changed(hass)
-    await hass.async_block_till_done()
 
-    state_aptype = hass.states.get(state_key_aptype)
-    state_wifi_band = hass.states.get(state_key_wifi_band)
-    assert state_aptype is not None
+    assert (state_aptype := hass.states.get(state_key_aptype))
     assert state_aptype.state == STATE_UNAVAILABLE
-    assert state_wifi_band is not None
+    assert (state_wifi_band := hass.states.get(state_key_wifi_band))
     assert state_wifi_band.state == STATE_UNAVAILABLE
 
     # Emulate device recovers
@@ -290,13 +283,10 @@ async def test_wifi_device_sensor(
     )
     freezer.tick(LONG_UPDATE_INTERVAL)
     async_fire_time_changed(hass)
-    await hass.async_block_till_done()
 
-    state_aptype = hass.states.get(state_key_aptype)
-    state_wifi_band = hass.states.get(state_key_wifi_band)
-    assert state_aptype is not None
+    assert (state_aptype := hass.states.get(state_key_aptype))
     assert state_aptype.state == WIFI_APTYPE[WIFI_VAP_MAIN_AP]
-    assert state_wifi_band is not None
+    assert (state_wifi_band := hass.states.get(state_key_wifi_band))
     assert state_wifi_band.state == WIFI_BANDS[WIFI_BAND_5G]
 
 
@@ -327,17 +317,12 @@ async def test_restoring_clients(
         f"{DISCOVERY_INFO.properties['SN']}_{mac_address}_wi_fi_band",
         config_entry=entry,
     )
-
     mock_device.device.async_get_wifi_connected_station = AsyncMock(
         return_value=NO_CONNECTED_STATIONS
     )
-
     await hass.config_entries.async_setup(entry.entry_id)
-    await hass.async_block_till_done()
 
-    state_aptype = hass.states.get(state_key_aptype)
-    state_wifi_band = hass.states.get(state_key_wifi_band)
-    assert state_aptype is not None
+    assert (state_aptype := hass.states.get(state_key_aptype))
     assert state_aptype.state == STATE_UNKNOWN
-    assert state_wifi_band is not None
+    assert (state_wifi_band := hass.states.get(state_key_wifi_band))
     assert state_wifi_band.state == STATE_UNKNOWN
